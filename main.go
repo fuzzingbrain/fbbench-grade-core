@@ -1,6 +1,6 @@
 // Command grade-core is the FuzzingBrain grading executor: a single-shot,
 // MCP-free judge. Given an assembled oracle bundle (expected.yaml + the
-// release-asan / fixed-asan / coverage harness binaries + bench.yaml) and one
+// vuln/asan, vuln/cov and fixed/asan harness binaries + bench.yaml) and one
 // candidate input, it runs the capability ladder (reach / crash / differential
 // / class / site) and prints the verdict as JSON on stdout.
 //
@@ -61,7 +61,7 @@ func ensurePathHas(dir string) {
 type server struct {
 	bugDir    string // holds bench.yaml (harness invocation, timeout, capability_set)
 	workspace string // scratch: candidate copy + per-round grader-run dirs
-	oracleDir string // answer key: grader/expected.yaml + binaries/{release,fixed,coverage}-asan
+	oracleDir string // answer key: grader/expected.yaml + binaries/{vuln/asan,vuln/cov,fixed/asan}
 }
 
 func main() {
