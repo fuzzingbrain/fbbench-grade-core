@@ -106,6 +106,15 @@ func main() {
 		os.Setenv("JAVA_HOME", firstExisting(
 			[]string{"/usr/lib/jvm/java-21-openjdk-amd64"}, func() string { return "" }))
 	}
+	// Same class of failure as a missing symbolizer, and just as silent. Ubuntu
+	// ships DEBUGINFOD_URLS=https://debuginfod.ubuntu.com by default; the graded
+	// harnesses have no outbound network, so EVERY llvm-symbolizer call blocks
+	// ~90s on the debuginfod lookup, which blows the per-bug harness timeout —
+	// ASan gets its "ERROR:" line out but is killed before printing a single
+	// "#N file:line" frame, so class/crash fire while site/reach do not
+	// (vuln_exit 124). We never want debuginfod here: the binaries being graded
+	// carry their own DWARF. Force it off unconditionally.
+	os.Setenv("DEBUGINFOD_URLS", "")
 	fmt.Fprintf(os.Stderr, "grade-core: symbolizer=%q java=%q rounds=%s\n",
 		os.Getenv("ASAN_SYMBOLIZER_PATH"), os.Getenv("JAVA_HOME"), os.Getenv("BENCH_GRADE_ROUNDS"))
 	// An explicit -rounds overrides the default policy above.
