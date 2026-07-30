@@ -183,11 +183,22 @@ func (s *server) toolGrade(args []byte) (any, error) {
 	}
 
 	evidence := buildEvidence(shown, expected)
+	// Every round's VERBATIM output, not just the representative one. Two rounds
+	// of the same input can fault in different places, so keeping only `shown`
+	// loses a genuine finding; and the raw text is the one thing that cannot be
+	// recomputed later, which is what lets the backend re-derive crash signatures
+	// under new rules without re-running a harness. Untruncated on purpose — the
+	// tail-trimmed copy below is for the agent, this one is for the archive.
 	roundsOut := make([]map[string]any, 0, len(roundResults))
-	for _, r := range roundResults {
+	for i, r := range roundResults {
 		roundsOut = append(roundsOut, map[string]any{
+			"round":        i + 1,
 			"round_id":     r.RoundID,
 			"capabilities": r.Capabilities,
+			"stdout":       r.stdout,
+			"stderr":       r.stderr,
+			"exit_code":    r.exitCode,
+			"signal":       r.signal,
 		})
 	}
 
