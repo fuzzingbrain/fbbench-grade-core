@@ -92,7 +92,6 @@ func main() {
 	// Pinning them here means grade-core reproduces the deployed oracle no matter
 	// how it is launched, instead of depending on the caller's environment.
 	setDefaultEnv("BENCH_GRADE_ROUNDS", "5")
-	setDefaultEnv("BENCH_GRADE_ATTEMPTS", "5")
 	setDefaultEnv("BENCH_FIXED_RUN_ATTEMPTS", "5")
 	// Ensure the LLVM toolchain dir is on PATH (a non-interactive shell may drop
 	// /usr/local/bin), then resolve the symbolizer by known location OR PATH.
