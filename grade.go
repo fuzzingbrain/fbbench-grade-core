@@ -264,22 +264,52 @@ func (s *server) toolGrade(args []byte) (any, error) {
 //
 // Replacing it with a fixed marker fixes both: nothing to reach for, and the
 // same crash produces the same text on every grade.
+//
+// The oracle's marker swallows the whole path, not only the directory. Replacing
+// the directory alone still left "binaries/vuln/asan/harness" in view, which is
+// enough to reconstruct a plausible absolute path -- agents in one sweep did
+// exactly that seven times across five challenges, and every attempt failed the
+// same way, because the path exists only on this host. It also names the bundle
+// layout: "vuln" says out loud that a non-vulnerable build exists beside it, so
+// the agent learns the challenge is graded differentially against an upstream
+// fix. Neither the misdirection nor the disclosure is worth keeping.
+//
+// The module offset that follows the path IS kept: "<oracle>+0x2d568a" still
+// tells one frame from another, which is what the trace is for and what a
+// signature is built from. That is why the tail below stops at the "+".
+//
+// The workspace is deliberately NOT folded this way. Those files are the agent's
+// own, it needs to know which of its candidates a report is about, and
+// "<workspace>/poc_v3.bin" says that where a bare "<workspace>" would not.
+var oraclePathTail = `[A-Za-z0-9_./-]*`
+
 func (s *server) redactPaths(text string) string {
-	for _, r := range []struct{ dir, marker string }{
-		{s.oracleDir, "<oracle>"},
-		{s.workspace, "<workspace>"},
+	for _, r := range []struct {
+		dir, marker string
+		whole       bool
+	}{
+		{s.oracleDir, "<oracle>", true},
+		{s.workspace, "<workspace>", false},
 	} {
 		if r.dir == "" {
 			continue
 		}
-		text = strings.ReplaceAll(text, r.dir, r.marker)
+		forms := []string{r.dir}
 		// A sanitizer prints whatever the loader resolved, so on a host where
 		// /tmp is a symlink the backtrace carries the resolved path and the
 		// literal above never matches. Replacing both forms means this keeps
 		// working if the grading host's layout changes under it, rather than
 		// failing silently the way a single-form match would.
 		if resolved, err := filepath.EvalSymlinks(r.dir); err == nil && resolved != r.dir {
-			text = strings.ReplaceAll(text, resolved, r.marker)
+			forms = append(forms, resolved)
+		}
+		for _, form := range forms {
+			if r.whole {
+				text = regexp.MustCompile(regexp.QuoteMeta(form)+oraclePathTail).
+					ReplaceAllString(text, r.marker)
+			} else {
+				text = strings.ReplaceAll(text, form, r.marker)
+			}
 		}
 	}
 	return text
