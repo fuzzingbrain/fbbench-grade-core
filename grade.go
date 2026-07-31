@@ -195,8 +195,8 @@ func (s *server) toolGrade(args []byte) (any, error) {
 			"round":        i + 1,
 			"round_id":     r.RoundID,
 			"capabilities": r.Capabilities,
-			"stdout":       r.stdout,
-			"stderr":       r.stderr,
+			"stdout":       s.redactPaths(r.stdout),
+			"stderr":       s.redactPaths(r.stderr),
 			"exit_code":    r.exitCode,
 			"signal":       r.signal,
 		})
@@ -213,8 +213,8 @@ func (s *server) toolGrade(args []byte) (any, error) {
 	// crash, the agent sees the crash evidence instead of a stray clean round,
 	// so its feedback loop isn't misled. Still one genuine run's real output.
 	harnessOut := map[string]any{
-		"stdout":    tailTrunc(shown.stdout, 2000),
-		"stderr":    tailTrunc(shown.stderr, 8000),
+		"stdout":    tailTrunc(s.redactPaths(shown.stdout), 2000),
+		"stderr":    tailTrunc(s.redactPaths(shown.stderr), 8000),
 		"exit_code": shown.exitCode,
 		"signal":    shown.signal,
 	}
@@ -247,6 +247,42 @@ func (s *server) toolGrade(args []byte) (any, error) {
 		out["evidence"] = evidence
 	}
 	return out, nil
+}
+
+// redactPaths hides where the oracle lives before its output leaves this
+// process. A sanitizer backtrace names the module it faulted in by absolute
+// path, and the bundle is assembled into a fresh temp directory for every grade,
+// so the raw text hands the agent the grading host's filesystem layout and a
+// path that changes on every call.
+//
+// Both halves of that cost something. An agent in one sweep read the path out of
+// its own crash report and spent a dozen turns running nm, strings, objdump and
+// ldd against it, hoping to read the oracle binary. Every attempt failed, since
+// the path does not exist inside the challenge container, but the seal should
+// not have to be what stops it. And a path that differs per grade makes the same
+// crash look like a new one each time it is seen.
+//
+// Replacing it with a fixed marker fixes both: nothing to reach for, and the
+// same crash produces the same text on every grade.
+func (s *server) redactPaths(text string) string {
+	for _, r := range []struct{ dir, marker string }{
+		{s.oracleDir, "<oracle>"},
+		{s.workspace, "<workspace>"},
+	} {
+		if r.dir == "" {
+			continue
+		}
+		text = strings.ReplaceAll(text, r.dir, r.marker)
+		// A sanitizer prints whatever the loader resolved, so on a host where
+		// /tmp is a symlink the backtrace carries the resolved path and the
+		// literal above never matches. Replacing both forms means this keeps
+		// working if the grading host's layout changes under it, rather than
+		// failing silently the way a single-form match would.
+		if resolved, err := filepath.EvalSymlinks(r.dir); err == nil && resolved != r.dir {
+			text = strings.ReplaceAll(text, resolved, r.marker)
+		}
+	}
+	return text
 }
 
 // tailTrunc keeps the last n bytes (sanitizer reports are at the end of stderr).
